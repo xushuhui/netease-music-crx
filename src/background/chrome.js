@@ -107,6 +107,12 @@ function initContextMenu() {
 function initMessageHandler() {
   chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
     const { action, params } = request;
+    if (action === "popupLog") {
+      const [event, payload] = params || [];
+      console.info(event, payload);
+      sendResponse({ isErr: false, message: "" });
+      return true;
+    }
     const fn = storeUtils[action];
     if (fn) {
       (async () => {

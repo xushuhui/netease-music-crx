@@ -2,6 +2,7 @@ import { proxy } from "valtio";
 
 import { loadData, saveData, sendToPopup } from "./chrome";
 import api from "./api";
+import { loadCloudSongsPage } from "./cloud";
 import { getKuWoSong } from "./kuwo";
 import { getMiGuSong } from "./migu";
 
@@ -25,10 +26,13 @@ import {
 
 // 播放器
 const audio = new Audio();
+const CLOUD_SONGS_PAGE_LIMIT = 100;
 // 缓存歌单
 let playlistDetailStore = {};
 // 缓存歌单内歌曲
 let songsMapStore = {};
+// 缓存云盘滚动位置
+let cloudScrollSnapshotStore = {};
 // 播放状态
 let audioState = { ...EMPTY_AUDIO_STATE, volumeMute: null };
 // 加载歌曲时间
@@ -176,10 +180,65 @@ export async function loadSongsMap() {
   if (songsMap) {
     return songsMap;
   }
+  if (selectedPlaylist.type === PLAYLIST_TYPE.CLOUD) {
+    return {};
+  }
   const tracks = await loadTracks(selectedPlaylist.normalIndexes);
   songsMap = tracksToSongsMap(tracks);
   songsMapStore[selectedPlaylist.id] = songsMap;
   return songsMap;
+}
+
+export async function loadMoreSongs() {
+  const { selectedPlaylist } = store;
+  if (!selectedPlaylist?.id || selectedPlaylist.type !== PLAYLIST_TYPE.CLOUD) {
+    return { selectedPlaylist, loadedMore: false };
+  }
+  if (!selectedPlaylist.hasMore) {
+    return { selectedPlaylist, loadedMore: false };
+  }
+
+  const page = await loadCloudSongsPage(
+    (limit, offset) => api.getCloudSongs(limit, offset),
+    selectedPlaylist.nextOffset || 0,
+    CLOUD_SONGS_PAGE_LIMIT
+  );
+  const tracks = page.songs.map(mapCloudSong);
+  const appendedSongIds = tracks.map((track) => track.id);
+  const nextSongsMap = {
+    ...(songsMapStore[selectedPlaylist.id] || {}),
+    ...tracksToSongsMap(tracks),
+  };
+  const normalIndexes = selectedPlaylist.normalIndexes.concat(appendedSongIds);
+  const nextSelectedPlaylist = {
+    ...selectedPlaylist,
+    normalIndexes,
+    shuffleIndexes: shuffleArr(normalIndexes),
+    hasMore: page.hasMore,
+    nextOffset: page.nextOffset,
+  };
+
+  songsMapStore[selectedPlaylist.id] = nextSongsMap;
+  playlistDetailStore[selectedPlaylist.id] = nextSelectedPlaylist;
+  store.selectedPlaylist = nextSelectedPlaylist;
+  return {
+    selectedPlaylist: nextSelectedPlaylist,
+    loadedMore: appendedSongIds.length > 0,
+  };
+}
+
+export function saveCloudScrollSnapshot(playlistId, snapshot) {
+  if (!playlistId || !snapshot) {
+    return {};
+  }
+  cloudScrollSnapshotStore[playlistId] = snapshot;
+  return {};
+}
+
+export function loadCloudScrollSnapshot(playlistId) {
+  return {
+    cloudScrollSnapshot: cloudScrollSnapshotStore[playlistId] || null,
+  };
 }
 
 export async function likeSong(playlistId) {
@@ -258,6 +317,9 @@ export async function refreshPlaylists() {
 
   songsMapStore = {};
   globalThis.songsMapStore = songsMapStore;
+
+  cloudScrollSnapshotStore = {};
+  globalThis.cloudScrollSnapshotStore = cloudScrollSnapshotStore;
 
   if (store.userId) {
     store.playlists = await loadPlaylists();
@@ -443,6 +505,8 @@ async function loadPlaylistDetails(playlist) {
     let cachedPlaylistDetail = playlistDetailStore[playlist.id];
     if (cachedPlaylistDetail) return cachedPlaylistDetail;
     let normalIndexes = [];
+    let hasMore = false;
+    let nextOffset = 0;
     const mapSong1 = (song) => {
       const { id, name, album: al, artists: ar, duration, fee } = song;
       return { id, name, al, ar, dt: duration, st: 0, fee };
@@ -470,25 +534,14 @@ async function loadPlaylistDetails(playlist) {
       }
     } else if (playlist.id === PLAYLIST_CLOUD_SONGS.id) {
       try {
-        const songs = await loadCloudSongs();
-        dealTracks(
-          songs.map((song) => {
-            const { songName: name, songId: id, simpleSong, artist } = song;
-            const picUrl = simpleSong?.al?.picUrl || "";
-            const ar = Array.isArray(simpleSong?.ar)
-              ? simpleSong?.ar
-              : [{ name: artist }];
-            return {
-              id,
-              name,
-              al: { picUrl },
-              ar,
-              dt: simpleSong?.dt || 0,
-              st: 0,
-              fee: 0,
-            };
-          })
+        const page = await loadCloudSongsPage(
+          (limit, offset) => api.getCloudSongs(limit, offset),
+          0,
+          CLOUD_SONGS_PAGE_LIMIT
         );
+        dealTracks(page.songs.map(mapCloudSong));
+        hasMore = page.hasMore;
+        nextOffset = page.nextOffset;
       } catch (err) {
         logger.error("loadCloudSongs.error", err.message);
         throw new Error(err.message);
@@ -512,6 +565,8 @@ async function loadPlaylistDetails(playlist) {
       normalIndexes,
       invalidIndexes: [],
       shuffleIndexes,
+      hasMore,
+      nextOffset,
     };
     playlistDetailStore[playlist.id] = cachedPlaylistDetail;
     return cachedPlaylistDetail;
@@ -607,24 +662,14 @@ async function loadTracks(ids) {
   return chunkTracks.flatMap((v) => v);
 }
 
-async function loadCloudSongs() {
-  let songs = [];
-  while (true) {
-    const res = await api.getCloudSongs();
-    if (res.code === 200) {
-      songs = [...songs, ...res.data];
-      if (!res.hasMore) break;
-    } else {
-      throw new Error(res.message);
-    }
-  }
-  return songs;
-}
-
 async function playNextSong() {
-  const { selectedPlaylist } = store;
+  let { selectedPlaylist } = store;
   let songId = store.selectedSong.id;
   if (store.playMode !== PLAY_MODE.ONE) {
+    if (shouldLoadMoreCloudSongs(selectedPlaylist, songId)) {
+      await loadMoreSongs();
+      selectedPlaylist = store.selectedPlaylist;
+    }
     songId = getNextSongId(selectedPlaylist, songId);
   }
   const { selectedSong, playing } = await loadAndPlaySong(
@@ -632,6 +677,20 @@ async function playNextSong() {
     songId
   );
   return { selectedSong, playing };
+}
+
+function shouldLoadMoreCloudSongs(playlistDetail, songId) {
+  if (
+    !playlistDetail ||
+    playlistDetail.type !== PLAYLIST_TYPE.CLOUD ||
+    !playlistDetail.hasMore ||
+    store.playMode === PLAY_MODE.SHUFFLE ||
+    store.dir !== 1
+  ) {
+    return false;
+  }
+  const { normalIndexes } = playlistDetail;
+  return normalIndexes[normalIndexes.length - 1] === songId;
 }
 
 function getNextSongId(playlistDetail, songId) {
@@ -770,6 +829,23 @@ function tracksToSongsMap(tracks) {
     return songsMap;
   }, {});
   return songsMap;
+}
+
+function mapCloudSong(song) {
+  const { songName: name, songId: id, simpleSong, artist } = song;
+  const picUrl = simpleSong?.al?.picUrl || "";
+  const ar = Array.isArray(simpleSong?.ar)
+    ? simpleSong?.ar
+    : [{ name: artist }];
+  return {
+    id,
+    name,
+    al: { picUrl },
+    ar,
+    dt: simpleSong?.dt || 0,
+    st: 0,
+    fee: 0,
+  };
 }
 
 globalThis.audio = audio;

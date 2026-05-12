@@ -48,6 +48,18 @@ export function loadSongsMap() {
   return doAction("loadSongsMap");
 }
 
+export function loadMoreSongs() {
+  return doAction("loadMoreSongs");
+}
+
+export function saveCloudScrollSnapshot(playlistId, snapshot) {
+  return doAction("saveCloudScrollSnapshot", [playlistId, snapshot]);
+}
+
+export function loadCloudScrollSnapshot(playlistId) {
+  return doAction("loadCloudScrollSnapshot", [playlistId]);
+}
+
 export function likeSong(playlistId) {
   return doAction("likeSong", [playlistId]);
 }
@@ -70,6 +82,13 @@ export function refreshPlaylists() {
 
 export function popupInit() {
   return doAction("popupInit");
+}
+
+export function popupLog(event, payload = {}) {
+  chrome.runtime.sendMessage({
+    action: "popupLog",
+    params: [event, payload],
+  });
 }
 
 function doAction(action, params = []) {
