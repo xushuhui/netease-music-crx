@@ -148,6 +148,10 @@ export async function changePlaylist(playlistId) {
     playlist = store.playlists[0];
     songId = null;
   }
+  if (!playlist) {
+    Object.assign(store, { selectedPlaylist: null, selectedSong: null });
+    return { selectedPlaylist: null, selectedSong: null };
+  }
   const selectedPlaylist = await loadPlaylistDetails(playlist);
   if (!songId || !selectedPlaylist.normalIndexes.find((v) => v === songId)) {
     const songsIndex =
@@ -157,7 +161,8 @@ export async function changePlaylist(playlistId) {
     songId = songsIndex[0];
   }
   if (!songId) {
-    throw new Error("播放列表为空");
+    Object.assign(store, { selectedPlaylist, selectedSong: null });
+    return { selectedPlaylist, selectedSong: null };
   }
   loadAndPlaySong(selectedPlaylist, songId)
     .then(({ selectedSong }) => {
@@ -505,6 +510,9 @@ async function loadUserPlaylist() {
 
 async function loadPlaylistDetails(playlist) {
   try {
+    if (!playlist) {
+      throw new Error("歌单不存在");
+    }
     let cachedPlaylistDetail = playlistDetailStore[playlist.id];
     if (cachedPlaylistDetail) return cachedPlaylistDetail;
     let normalIndexes = [];
@@ -575,7 +583,7 @@ async function loadPlaylistDetails(playlist) {
     return cachedPlaylistDetail;
   } catch (err) {
     logger.error("loadPlaylistDetails.err", err);
-    throw new Error(`获取${playlist.name}歌单失败`);
+    throw new Error(`获取${playlist?.name || "未知"}歌单失败`);
   }
 }
 
