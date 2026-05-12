@@ -24,6 +24,7 @@ import {
 // 播放器
 const audio = new Audio();
 const CLOUD_SONGS_PAGE_LIMIT = 100;
+const SONG_URL_BITRATES = [999000, 320000, 128000];
 // 缓存歌单
 let playlistDetailStore = {};
 // 缓存歌单内歌曲
@@ -609,11 +610,7 @@ async function loadAndPlaySong(playlistDetail, songId, failable = true) {
     } else if (song.st < 0 || (song.vip && !store.vip)) {
       throw new Error("歌曲无法播放");
     } else {
-      const res = await api.getSongUrls([songId]);
-      if (res.code !== 200) {
-        throw new Error(res.message);
-      }
-      url = res.data.map((v) => v.url)[0];
+      url = await loadSongUrl(songId);
       if (!url) {
         throw new Error("获取资源失败");
       }
@@ -632,18 +629,37 @@ async function loadAndPlaySong(playlistDetail, songId, failable = true) {
     persistSave();
     return change;
   } catch (err) {
-    logger.error("loadSongDetail.error", song.id, song.name, err.message);
     if (song) {
       song.valid = false;
       sendToPopup({ topic: "changeSongsMap", songId, op: "invalid" });
     }
-    invalidIndexes.push(songId);
-    if (!failable || normalIndexes.length - invalidIndexes.length < 1) {
+    if (!invalidIndexes.includes(songId)) {
+      invalidIndexes.push(songId);
+    }
+    const shouldFail =
+      !failable || normalIndexes.length - invalidIndexes.length < 1;
+    if (shouldFail) {
+      logger.error("loadSongDetail.error", song?.id, song?.name, err.message);
       throw new Error("歌曲无法播放");
     }
+    logger.info("loadSongDetail.skip", song?.id, song?.name, err.message);
     const newSongId = getNextSongId(playlistDetail, songId);
     return loadAndPlaySong(playlistDetail, newSongId, failable);
   }
+}
+
+async function loadSongUrl(songId) {
+  for (const bitrate of SONG_URL_BITRATES) {
+    const res = await api.getSongUrls([songId], bitrate);
+    if (res.code !== 200) {
+      throw new Error(res.message);
+    }
+    const url = res.data.map((v) => v.url).find(Boolean);
+    if (url) {
+      return url;
+    }
+  }
+  return null;
 }
 
 async function loadTracks(ids) {
