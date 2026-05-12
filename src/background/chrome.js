@@ -7,14 +7,15 @@ import {
   parseCookies,
   serializeCookies,
 } from "../utils";
-import { KUWO_DOMAIN, KUWO_MOBI_DOMAIN } from "./kuwo";
-import { MIGU_DOMAIN } from "./migu";
 
 export function init() {
-  initContextMenu();
+  if (chrome.contextMenus) {
+    initContextMenu();
+  }
   initMessageHandler();
-  initRequestHook();
-  initResponseHook();
+  if (chrome.webRequest) {
+    initRequestHook();
+  }
 }
 
 export function sendToPopup(data) {
@@ -23,18 +24,36 @@ export function sendToPopup(data) {
 
 export function saveData(data) {
   return new Promise((resolve) => {
-    chrome.storage.local.set(data, resolve);
+    if (chrome.storage) {
+      chrome.storage.local.set(data, resolve);
+      return;
+    }
+    chrome.runtime.sendMessage(
+      { target: "service-worker", action: "storage.set", data },
+      resolve
+    );
   });
 }
 
 export function loadData() {
   return new Promise((resolve) => {
-    chrome.storage.local.get(resolve);
+    if (chrome.storage) {
+      chrome.storage.local.get(resolve);
+      return;
+    }
+    chrome.runtime.sendMessage(
+      { target: "service-worker", action: "storage.get" },
+      resolve
+    );
   });
 }
 
 function initContextMenu() {
-  const contexts = ["browser_action"];
+  const contexts = [
+    chrome.runtime.getManifest().manifest_version === 3
+      ? "action"
+      : "browser_action",
+  ];
 
   const contextMenus = {
     togglePlaying: (playing = COMMON_PROPS.playing) => ({
@@ -106,6 +125,12 @@ function initContextMenu() {
 
 function initMessageHandler() {
   chrome.runtime.onMessage.addListener((request, _, sendResponse) => {
+    if (!chrome.contextMenus && request?.target !== "offscreen") {
+      return false;
+    }
+    if (request?.target && request.target !== "offscreen") {
+      return false;
+    }
     const { action, params } = request;
     if (action === "popupLog") {
       const [event, payload] = params || [];
@@ -161,78 +186,13 @@ function initRequestHook() {
             });
           details.requestHeaders.push({ name: "Referer", value: DOMAIN });
           logger.verbose("requestHook.163", details.requestHeaders);
-        } else if (details.url.startsWith(KUWO_DOMAIN)) {
-          let token = "";
-          for (let i = 0; i < details.requestHeaders.length; ++i) {
-            const header = details.requestHeaders[i];
-            if (header.name === "Origin") {
-              header.value = KUWO_DOMAIN;
-            } else if (header.name === "Cookie") {
-              token = parseCookies([header.value]).kw_token;
-            }
-          }
-          if (token)
-            details.requestHeaders.push({ name: "csrf", value: token });
-          if (store.chinaIp)
-            details.requestHeaders.push({
-              name: "X-Real-Ip",
-              value: store.chinaIp,
-            });
-          details.requestHeaders.push({ name: "Referer", value: KUWO_DOMAIN });
-          logger.verbose("requestHook.kuwo", details.requestHeaders);
-        } else if (details.url.startsWith(KUWO_MOBI_DOMAIN)) {
-          for (let i = 0; i < details.requestHeaders.length; ++i) {
-            const header = details.requestHeaders[i];
-            if (header.name === "Origin") {
-              header.value = KUWO_DOMAIN;
-            }
-          }
-          details.requestHeaders.push({
-            name: "user-agent",
-            value: "okhttp/3.10.0",
-          });
-          details.requestHeaders.push({ name: "Referer", value: KUWO_DOMAIN });
-          logger.verbose("requestHook.kuwo.mobi", details.requestHeaders);
-        } else if (details.url.startsWith(MIGU_DOMAIN)) {
-          for (let i = 0; i < details.requestHeaders.length; ++i) {
-            const header = details.requestHeaders[i];
-            if (header.name === "Origin") {
-              header.value = MIGU_DOMAIN;
-            }
-          }
-          details.requestHeaders.push({ name: "Referer", value: MIGU_DOMAIN });
-          logger.verbose("requestHook.migu", details.requestHeaders);
         }
       }
       return { requestHeaders: details.requestHeaders };
     },
     {
-      urls: [`${DOMAIN}/weapi/*`, "*://*.kuwo.cn/*", "*://*.migu.cn/*"],
+      urls: [`${DOMAIN}/weapi/*`],
     },
     ["requestHeaders", "blocking", "extraHeaders"]
-  );
-}
-
-function initResponseHook() {
-  chrome.webRequest.onHeadersReceived.addListener(
-    function (details) {
-      if (
-        details?.initiator &&
-        details.initiator.startsWith("chrome-extension://")
-      ) {
-        if (details.url.startsWith(MIGU_DOMAIN)) {
-          details.responseHeaders.push({
-            name: "Access-Control-Allow-Origin",
-            value: "*",
-          });
-          logger.verbose("responseHook.migu", details.requestHeaders);
-        }
-      }
-      return { responseHeaders: details.responseHeaders };
-    },
-    {
-      urls: ["*://*.migu.cn/*"],
-    },
-    ["responseHeaders", "blocking", "extraHeaders"]
   );
 }

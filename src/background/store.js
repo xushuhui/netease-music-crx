@@ -3,8 +3,6 @@ import { proxy } from "valtio";
 import { loadData, saveData, sendToPopup } from "./chrome";
 import api from "./api";
 import { loadCloudSongsPage } from "./cloud";
-import { getKuWoSong } from "./kuwo";
-import { getMiGuSong } from "./migu";
 
 import {
   PLAY_MODE,
@@ -20,7 +18,6 @@ import {
   logger,
   chunkArr,
   shuffleArr,
-  race,
   randChinaIp,
 } from "../utils";
 
@@ -342,6 +339,9 @@ export function popupInit() {
 }
 
 function listenCommand() {
+  if (!chrome.commands) {
+    return;
+  }
   chrome.commands.onCommand.addListener((command) => {
     console.log(`Command: ${command}`);
     switch (command) {
@@ -596,14 +596,7 @@ async function loadAndPlaySong(playlistDetail, songId, failable = true) {
     if (!song || !song.valid) {
       throw new Error("歌曲无法播放");
     } else if (song.st < 0 || (song.vip && !store.vip)) {
-      try {
-        url = await race([
-          getKuWoSong(song.name, song.artists),
-          getMiGuSong(song.name, song.artists),
-        ]);
-      } catch {
-        throw new Error("尝试第三方获取歌曲失败");
-      }
+      throw new Error("歌曲无法播放");
     } else {
       const res = await api.getSongUrls([songId]);
       if (res.code !== 200) {

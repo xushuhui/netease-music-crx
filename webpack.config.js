@@ -27,7 +27,8 @@ const options = {
   mode: process.env.NODE_ENV || "development",
   entry: {
     popup: path.join(__dirname, "src/popup.js"),
-    background: path.join(__dirname, "src/background.js"),
+    offscreen: path.join(__dirname, "src/offscreen.js"),
+    "service-worker": path.join(__dirname, "src/service-worker.js"),
   },
   output: {
     path: path.resolve(__dirname, "build"),
@@ -123,9 +124,9 @@ const options = {
       cache: false,
     }),
     new HtmlWebpackPlugin({
-      template: path.join(__dirname, "src/background.html"),
-      filename: "background.html",
-      chunks: ["background"],
+      template: path.join(__dirname, "src/offscreen.html"),
+      filename: "offscreen.html",
+      chunks: ["offscreen"],
       cache: false,
     }),
   ],
