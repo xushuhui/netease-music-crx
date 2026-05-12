@@ -74,6 +74,13 @@ export function isElementInScrollContainerViewport(el, container) {
   );
 }
 
+export function getElementScrollTop(container) {
+  if (!container) {
+    return null;
+  }
+  return container.scrollTop;
+}
+
 export function getCloudScrollRestoreTop(scrollSnapshot, currentState) {
   if (!scrollSnapshot) {
     return null;
@@ -123,7 +130,11 @@ export function shouldRetainScrollAfterAppend(snapshot, currentSongsLength) {
   return currentSongsLength > snapshot.songsLength;
 }
 
-export function getAppendedPageScrollTop(snapshot, currentSongsLength, rowHeight) {
+export function getAppendedPageScrollTop(
+  snapshot,
+  currentSongsLength,
+  rowHeight
+) {
   if (!snapshot || currentSongsLength <= snapshot.songsLength) {
     return null;
   }

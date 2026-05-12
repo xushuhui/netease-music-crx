@@ -85,7 +85,7 @@
 
 1. `domain/`：纯业务规则（播放模式、下一首选择、云盘分页状态计算）
 2. `application/`：用例编排（切歌、换歌单、刷新）
-3. `infrastructure/`：API、chrome storage、webRequest hook、第三方音源
+3. `infrastructure/`：API、chrome storage、DNR/cookie 规则、第三方音源
 4. `adapter/`：消息分发与 DTO 组装
 
 ### 3.2 popup 分层
@@ -163,13 +163,27 @@
 任务：
 
 1. 清理 `globalThis` 暴露（仅保留必要调试入口）。
-2. 补充 `README` 中开发架构图与调试开关说明。
+2. 补充 `README` 中 MV3 架构、DNR/cookie 登录态和调试开关说明。
 3. 更新 `docs/test-op.md` 为“手工 + 自动”联动清单。
 
 验收：
 
 - 新人可按文档定位模块职责并跑通验证。
 - 日志默认干净，问题定位时可一键开启 debug。
+
+### 2026-05-13 补充：MV3 登录态链路现状
+
+当前扩展已迁到 Manifest V3：
+
+1. `service-worker.js` 负责菜单、命令、消息转发和 DNR session rule 同步。
+2. `offscreen.js` 启动原 `background/store.js`，负责音频和业务状态。
+3. 网易云请求通过 `fetch(..., credentials: "include")` 发起。
+4. 请求头不再使用 blocking `webRequest`，改为：
+   - 静态 DNR 规则设置 `Origin` / `Referer`；
+   - service worker 读取 `music.163.com` cookie，并用 DNR session rule append 小写 `cookie` 头；
+   - cookie 头保留旧逻辑中的 `os=pc`。
+
+后续重构 `infrastructure/` 时，应把这条链路作为 Chrome adapter 的边界，不要回退到 `webRequestBlocking`。
 
 ---
 
@@ -202,4 +216,3 @@
 
 - 本文档：重构范围、问题证据、阶段计划、验收标准。
 - 可直接作为后续任务拆分基线（按阶段开 issue / commit）。
-

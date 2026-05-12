@@ -1,21 +1,12 @@
 import store, * as storeUtils from "./store";
 import { subscribeKey } from "valtio/utils";
-import {
-  COMMON_PROPS,
-  DOMAIN,
-  logger,
-  parseCookies,
-  serializeCookies,
-} from "../utils";
+import { COMMON_PROPS, logger } from "../utils";
 
 export function init() {
   if (chrome.contextMenus) {
     initContextMenu();
   }
   initMessageHandler();
-  if (chrome.webRequest) {
-    initRequestHook();
-  }
 }
 
 export function sendToPopup(data) {
@@ -158,41 +149,4 @@ function initMessageHandler() {
     }
     return true;
   });
-}
-
-function initRequestHook() {
-  chrome.webRequest.onBeforeSendHeaders.addListener(
-    function (details) {
-      if (
-        details?.initiator &&
-        details.initiator.startsWith("chrome-extension://")
-      ) {
-        if (details.url.startsWith(DOMAIN)) {
-          for (let i = 0; i < details.requestHeaders.length; ++i) {
-            const header = details.requestHeaders[i];
-            if (header.name === "Origin") {
-              header.value = DOMAIN;
-            } else if (header.name === "Cookie") {
-              if (/\/weapi\/login/.test(details.url)) {
-                const cookieObj = parseCookies(["os=pc; " + header.value]);
-                header.value = serializeCookies(cookieObj);
-              }
-            }
-          }
-          if (store.chinaIp)
-            details.requestHeaders.push({
-              name: "X-Real-Ip",
-              value: store.chinaIp,
-            });
-          details.requestHeaders.push({ name: "Referer", value: DOMAIN });
-          logger.verbose("requestHook.163", details.requestHeaders);
-        }
-      }
-      return { requestHeaders: details.requestHeaders };
-    },
-    {
-      urls: [`${DOMAIN}/weapi/*`],
-    },
-    ["requestHeaders", "blocking", "extraHeaders"]
-  );
 }

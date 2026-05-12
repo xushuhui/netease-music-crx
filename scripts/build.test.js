@@ -36,6 +36,19 @@ test("bun build emits a Manifest V3 extension bundle", () => {
   assert.equal(manifest.action.default_icon, "icon-34.png");
   assert.ok(manifest.permissions.includes("offscreen"));
   assert.ok(manifest.permissions.includes("storage"));
+  assert.ok(manifest.permissions.includes("cookies"));
+  assert.ok(
+    manifest.permissions.includes("declarativeNetRequestWithHostAccess")
+  );
+  assert.ok(!manifest.permissions.includes("webRequest"));
+  assert.ok(!manifest.permissions.includes("webRequestBlocking"));
+  assert.deepEqual(manifest.declarative_net_request.rule_resources, [
+    {
+      id: "netease_request_headers",
+      enabled: true,
+      path: "rules/netease-request-headers.json",
+    },
+  ]);
   assert.ok(
     !manifest.permissions.some((permission) => permission.includes("://"))
   );
@@ -46,6 +59,12 @@ test("bun build emits a Manifest V3 extension bundle", () => {
   );
   assert.equal(
     fs.existsSync(path.join(repoRoot, "build", "offscreen.html")),
+    true
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(repoRoot, "build", "rules", "netease-request-headers.json")
+    ),
     true
   );
 });

@@ -24,9 +24,17 @@
 
 ```bash
 bun install
+bun test scripts/*.test.js
 bun run lint
 bun run build
 ```
+
+本项目当前是 Chrome Manifest V3 扩展：
+
+- 后台入口为 `service-worker.bundle.js`，音频播放运行在 offscreen document。
+- 网易云登录态依赖 `cookies` + `declarativeNetRequestWithHostAccess`。
+- `webRequestBlocking` 已不可用，不要再新增 blocking `webRequest` listener。
+- 本地调试权限变更后，建议在 `chrome://extensions` 移除旧扩展，再重新加载 `build/`。
 
 ## 许可
 

@@ -58,9 +58,9 @@
 
 ### 7) 调试能力无开关分层
 
-- 现象：`popupLog` 通过 message 管道写到 background `console.info`，与业务同路径。
+- 现象：`popupLog` 通过 message 管道写到后台控制台，MV3 下实际经 service worker/offscreen 转发，与业务同路径。
 - 影响：日志噪声高，线上/开发态边界不清晰。
-- 证据：`src/popup/store.js`、`src/background/chrome.js`。
+- 证据：`src/popup/store.js`、`src/background/chrome.js`、`src/service-worker.js`。
 
 ### 8) 全局对象暴露较多
 
@@ -84,8 +84,15 @@
 
 - `src/background/domain/`：纯规则函数（可单测）
 - `src/background/application/`：用例编排（action/usecase）
-- `src/background/infrastructure/`：API、chrome adapter、第三方音源
+- `src/background/infrastructure/`：API、chrome adapter、DNR/cookie 登录态、第三方音源
 - `src/background/index.js`：启动与装配
+
+补充现状（2026-05-13）：
+
+- MV3 后台入口是 `src/service-worker.js`。
+- 音频和原业务 store 运行在 `src/offscreen.js` 启动的 offscreen document。
+- 网易云登录态不再依赖 blocking `webRequest`，而是 `cookies` 权限 + DNR 规则。
+- 后续拆分时要优先保留 service worker 与 offscreen 的边界，避免把 MV2 模型重新引入。
 
 ## 2) Popup 分层
 
@@ -180,4 +187,3 @@
 
 按阶段 A 先做最小改造与测试补齐，再进入阶段 B。  
 先稳后拆，整体风险最低。
-

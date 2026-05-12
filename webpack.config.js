@@ -115,6 +115,11 @@ const options = {
           to: path.join(__dirname, "build"),
           force: true,
         },
+        {
+          from: "src/rules",
+          to: path.join(__dirname, "build/rules"),
+          force: true,
+        },
       ],
     }),
     new HtmlWebpackPlugin({

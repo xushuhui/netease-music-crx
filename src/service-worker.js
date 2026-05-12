@@ -1,14 +1,9 @@
-import {
-  COMMON_PROPS,
-  DOMAIN,
-  logger,
-  parseCookies,
-  serializeCookies,
-} from "./utils";
+import { COMMON_PROPS, DOMAIN, logger } from "./utils";
 
 const OFFSCREEN_URL = "offscreen.html";
 const OFFSCREEN_TARGET = "offscreen";
 const MENU_CONTEXTS = ["action"];
+const NETEASE_COOKIE_RULE_ID = 10001;
 const FORWARD_TOPICS = new Set([
   "sync",
   "error",
@@ -17,7 +12,6 @@ const FORWARD_TOPICS = new Set([
 ]);
 
 let creatingOffscreenDocument;
-let chinaIp = null;
 let userId = null;
 let audioPlaying = COMMON_PROPS.playing;
 let volumeMute = null;
@@ -27,25 +21,11 @@ init();
 function init() {
   initContextMenu();
   initMessageHandler();
-  initRequestHook();
   initCommandHandler();
-  loadServiceState();
 
   chrome.runtime.onInstalled.addListener(() => {
     initContextMenu();
   });
-
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local") return;
-    if (changes.chinaIp) {
-      chinaIp = changes.chinaIp.newValue || null;
-    }
-  });
-}
-
-async function loadServiceState() {
-  const data = await chrome.storage.local.get(["chinaIp"]);
-  chinaIp = data.chinaIp || null;
 }
 
 function initContextMenu() {
@@ -88,8 +68,32 @@ function initContextMenu() {
 
   chrome.contextMenus.onClicked.addListener((item) => {
     logger.debug(`contextMenu.${item.menuItemId}`);
-    forwardAction(item.menuItemId, []);
+    handleContextMenuAction(item.menuItemId);
   });
+}
+
+async function handleContextMenuAction(action) {
+  try {
+    const response = await forwardAction(action, []);
+    updateContextMenus(response);
+    sendSyncToPopup(response);
+  } catch (err) {
+    chrome.runtime.sendMessage({
+      target: "popup",
+      topic: "error",
+      message: err.message,
+    });
+  }
+}
+
+function sendSyncToPopup(change) {
+  chrome.runtime
+    .sendMessage({
+      target: "popup",
+      topic: "sync",
+      change,
+    })
+    .catch?.(() => {});
 }
 
 function updateContextMenus(change = {}) {
@@ -190,11 +194,54 @@ async function ensureOffscreenDocument() {
 
 async function forwardAction(action, params) {
   await ensureOffscreenDocument();
+  await syncNeteaseCookieRule();
   return chrome.runtime.sendMessage({
     target: OFFSCREEN_TARGET,
     action,
     params,
   });
+}
+
+async function syncNeteaseCookieRule() {
+  if (!chrome.cookies || !chrome.declarativeNetRequest) {
+    return;
+  }
+  const cookies = await chrome.cookies.getAll({ url: `${DOMAIN}/` });
+  const cookieHeader = [
+    "os=pc",
+    ...cookies.map((cookie) => `${cookie.name}=${cookie.value}`),
+  ].join("; ");
+  if (!cookies.some((cookie) => cookie.name === "MUSIC_U")) {
+    logger.info("netease.cookie.missing", {
+      names: cookies.map((cookie) => cookie.name),
+    });
+  }
+  const update = {
+    removeRuleIds: [NETEASE_COOKIE_RULE_ID],
+  };
+  if (cookieHeader) {
+    update.addRules = [
+      {
+        id: NETEASE_COOKIE_RULE_ID,
+        priority: 2,
+        action: {
+          type: "modifyHeaders",
+          requestHeaders: [
+            {
+              header: "cookie",
+              operation: "append",
+              value: cookieHeader,
+            },
+          ],
+        },
+        condition: {
+          urlFilter: "||music.163.com/",
+          resourceTypes: ["xmlhttprequest"],
+        },
+      },
+    ];
+  }
+  await chrome.declarativeNetRequest.updateSessionRules(update);
 }
 
 function initCommandHandler() {
@@ -210,41 +257,4 @@ function initCommandHandler() {
         break;
     }
   });
-}
-
-function initRequestHook() {
-  chrome.webRequest.onBeforeSendHeaders.addListener(
-    function (details) {
-      if (
-        details?.initiator &&
-        details.initiator.startsWith("chrome-extension://")
-      ) {
-        if (details.url.startsWith(DOMAIN)) {
-          for (let i = 0; i < details.requestHeaders.length; ++i) {
-            const header = details.requestHeaders[i];
-            if (header.name === "Origin") {
-              header.value = DOMAIN;
-            } else if (header.name === "Cookie") {
-              if (/\/weapi\/login/.test(details.url)) {
-                const cookieObj = parseCookies(["os=pc; " + header.value]);
-                header.value = serializeCookies(cookieObj);
-              }
-            }
-          }
-          if (chinaIp)
-            details.requestHeaders.push({
-              name: "X-Real-Ip",
-              value: chinaIp,
-            });
-          details.requestHeaders.push({ name: "Referer", value: DOMAIN });
-          logger.verbose("requestHook.163", details.requestHeaders);
-        }
-      }
-      return { requestHeaders: details.requestHeaders };
-    },
-    {
-      urls: [`${DOMAIN}/weapi/*`],
-    },
-    ["requestHeaders", "blocking", "extraHeaders"]
-  );
 }

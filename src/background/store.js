@@ -332,6 +332,7 @@ export async function refreshStore() {
   logger.debug("refreshStore");
   await refreshLogin();
   await refreshPlaylists();
+  return getPopupData();
 }
 
 export function popupInit() {
@@ -388,6 +389,7 @@ async function persistLoad() {
 function getPopupData() {
   const {
     userId,
+    vip,
     playing,
     audioPlaying,
     volume,
@@ -398,6 +400,7 @@ function getPopupData() {
   } = store;
   return {
     userId,
+    vip,
     playing,
     audioPlaying,
     volume,

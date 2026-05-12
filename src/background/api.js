@@ -20,7 +20,7 @@ function createRequester() {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      credentials: "same-origin",
+      credentials: "include",
       body: createQueryParams(data),
     });
     const result = await res.json();

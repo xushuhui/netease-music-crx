@@ -23,6 +23,7 @@ import { formatScondTime, PLAYLIST_TYPE } from "../utils";
 import {
   getCloudScrollRestoreTop,
   getAppendedPageScrollTop,
+  getElementScrollTop,
   getPlaylistScrollTarget,
   getVirtualSongWindow,
   isElementInScrollContainerViewport,
@@ -301,17 +302,17 @@ export default function PlayList({ maxHeight }) {
   }, [songs.length, loadingMore, selectedPlaylist?.id, selectedPlaylist?.type]);
 
   useEffect(() => {
-    if (
-      selectedPlaylist?.type !== PLAYLIST_TYPE.CLOUD ||
-      !songListRef.current
-    ) {
+    if (selectedPlaylist?.type !== PLAYLIST_TYPE.CLOUD) {
       return;
     }
+    const container = songListRef.current;
+    const scrollTop = getElementScrollTop(container);
+    if (scrollTop === null) return;
     storeUtils.popupLog("cloud.popup.songsRendered", {
       instanceId: debugInstanceIdRef.current,
       playlistId: selectedPlaylist?.id,
       songsLength: songs.length,
-      scrollTop: songListRef.current.scrollTop,
+      scrollTop,
       loadingMore,
     });
   }, [selectedPlaylist?.id, selectedPlaylist?.type, songs.length, loadingMore]);
@@ -426,10 +427,9 @@ export default function PlayList({ maxHeight }) {
               <CircularProgress />
             </Box>
           )}
-          {!loading &&
-            virtualSongWindow.topSpacerHeight > 0 && (
-              <Box sx={{ height: virtualSongWindow.topSpacerHeight }} />
-            )}
+          {!loading && virtualSongWindow.topSpacerHeight > 0 && (
+            <Box sx={{ height: virtualSongWindow.topSpacerHeight }} />
+          )}
           {!loading &&
             renderedSongs.map((song) => (
               <Box
@@ -503,24 +503,21 @@ export default function PlayList({ maxHeight }) {
                 </Box>
               </Box>
             ))}
-          {!loading &&
-            virtualSongWindow.bottomSpacerHeight > 0 && (
-              <Box sx={{ height: virtualSongWindow.bottomSpacerHeight }} />
-            )}
-          {!loading &&
-            isCloudPlaylist &&
-            selectedPlaylist?.hasMore && (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={loadingMore}
-                  onClick={loadMoreSongs}
-                >
-                  {loadingMore ? "加载中..." : "加载更多"}
-                </Button>
-              </Box>
-            )}
+          {!loading && virtualSongWindow.bottomSpacerHeight > 0 && (
+            <Box sx={{ height: virtualSongWindow.bottomSpacerHeight }} />
+          )}
+          {!loading && isCloudPlaylist && selectedPlaylist?.hasMore && (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 1 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={loadingMore}
+                onClick={loadMoreSongs}
+              >
+                {loadingMore ? "加载中..." : "加载更多"}
+              </Button>
+            </Box>
+          )}
           {loadingMore && (
             <Box
               sx={{

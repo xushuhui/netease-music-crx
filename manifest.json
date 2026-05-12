@@ -19,13 +19,22 @@
     "input",
     "storage",
     "offscreen",
-    "webRequest",
-    "webRequestBlocking",
-    "contextMenus"
+    "cookies",
+    "contextMenus",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "https://music.163.com/"
   ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "netease_request_headers",
+        "enabled": true,
+        "path": "rules/netease-request-headers.json"
+      }
+    ]
+  },
   "update_url": "http://clients2.google.com/service/update2/crx",
   "minimum_chrome_version": "109",
   "content_security_policy": {

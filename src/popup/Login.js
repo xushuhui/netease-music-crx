@@ -28,8 +28,7 @@ export default function Login() {
       });
     }
   }, [count]);
-  const handleSendSms = (e) => {
-    e.preventDefault();
+  const handleSendSms = () => {
     if (count > 0 || !state.phone) return;
     (async () => {
       await storeUtils.captchaSent(state.phone);
@@ -82,12 +81,13 @@ export default function Login() {
           </Grid>
           <Grid item xs={4}>
             <Button
+              type="button"
               fullWidth
               variant="outlined"
               size="large"
               disabled={count > 0}
               sx={{ p: "14px" }}
-              onClick={(e) => handleSendSms(e)}
+              onClick={handleSendSms}
             >
               {count === 0 ? "获取验证码" : `${count}s`}
             </Button>
@@ -114,6 +114,7 @@ export default function Login() {
         </Box>
         <Box sx={{ mt: 2, mb: 5 }}>
           <Button
+            type="button"
             fullWidth
             size="large"
             variant="outlined"

@@ -126,6 +126,15 @@ test("isElementInScrollContainerViewport checks against scroll container", async
   );
 });
 
+test("getElementScrollTop tolerates a missing scroll container", async () => {
+  const { getElementScrollTop } = await import(
+    "../src/popup/playlistScroll.js"
+  );
+
+  expect(getElementScrollTop(null)).toBeNull();
+  expect(getElementScrollTop({ scrollTop: 128 })).toBe(128);
+});
+
 test("getCloudScrollRestoreTop restores persisted absolute position with bounds", async () => {
   const { getCloudScrollRestoreTop } = await import(
     "../src/popup/playlistScroll.js"
