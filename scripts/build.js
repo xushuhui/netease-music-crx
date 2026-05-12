@@ -9,6 +9,31 @@ const config = require("../webpack.config");
 config.mode = "production";
 
 shell.rm("-rf", "build");
-webpack(config, function (err) {
-  if (err) throw err;
+
+function runCompiler() {
+  return new Promise((resolve, reject) => {
+    const compiler = webpack(config);
+    compiler.run((err, stats) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      if (stats?.hasErrors()) {
+        reject(new Error(stats.toString("errors-only")));
+        return;
+      }
+      compiler.close((closeErr) => {
+        if (closeErr) {
+          reject(closeErr);
+          return;
+        }
+        resolve();
+      });
+    });
+  });
+}
+
+runCompiler().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
 });
