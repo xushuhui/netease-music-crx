@@ -5,7 +5,7 @@
 - [ ] 打开网易云官网，确认当前 Chrome Profile 已登录
 - [ ] 打开扩展 service worker 控制台，确认没有 `webRequestBlocking` 报错
 - [x] 点击上下文菜单“每日刷新”，确认登录区消失并出现私人歌单/每日推荐可用（2026-05-13 已验证）
-- [ ] 如果仍未登录，检查 service worker 控制台是否出现 `netease.cookie.missing`
+- [ ] 如果仍未登录，检查 service worker 控制台是否出现 `netease.cookie.missing`（仅作排查线索，单条日志不等于登录失败）
 - [ ] 上下文菜单退出上次登录
 - [ ] 跳转到登录页面获取验证码
 - [ ] 输入错误验证码
