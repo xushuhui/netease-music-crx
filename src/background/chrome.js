@@ -3,7 +3,10 @@ import { subscribeKey } from "valtio/utils";
 import { COMMON_PROPS, logger } from "../utils";
 
 export function init() {
-  if (chrome.contextMenus) {
+  if (
+    chrome.contextMenus &&
+    chrome.runtime.getManifest().manifest_version !== 3
+  ) {
     initContextMenu();
   }
   initMessageHandler();
@@ -47,7 +50,7 @@ function initContextMenu() {
   ];
 
   const contextMenus = {
-    togglePlaying: (playing = COMMON_PROPS.playing) => ({
+    togglePlaying: (playing = COMMON_PROPS.audioPlaying) => ({
       title: playing ? "暂停" : "播放",
       contexts,
     }),

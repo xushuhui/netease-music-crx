@@ -58,15 +58,18 @@ export function updateAudioTime(currentTime) {
 }
 
 export async function togglePlaying() {
-  let { audioPlaying, playing } = store;
   if (!audio) {
     store.audioPlaying = false;
     store.playing = false;
-    return { audioPlaying: false };
+    return { audioPlaying: false, playing: false };
   }
-  if (audioPlaying) {
+  const isAudioPlaying = !audio.paused && !audio.ended;
+  if (isAudioPlaying) {
     audio.pause();
-    playing = false;
+    store.audioPlaying = false;
+    store.playing = false;
+    persistSave();
+    return { audioPlaying: false, playing: false };
   } else {
     if (Date.now() - songAt > 10 * 60 * 1000) {
       const currentTime = audioState.currentTime;
@@ -77,12 +80,12 @@ export async function togglePlaying() {
       );
       updateAudioTime(currentTime);
     }
-    audio.play();
-    playing = true;
+    await audio.play();
+    store.audioPlaying = true;
+    store.playing = true;
+    persistSave();
+    return { audioPlaying: true, playing: true };
   }
-  store.playing = playing;
-  persistSave();
-  return { audioPlaying: !audioPlaying };
 }
 
 export function toggleMute() {
@@ -93,6 +96,11 @@ export function toggleMute() {
     store.volumeMute = store.volume;
     updateVolume(0);
   }
+  persistSave();
+  return {
+    volume: store.volume,
+    volumeMute: store.volumeMute,
+  };
 }
 
 export function updateVolume(volume) {

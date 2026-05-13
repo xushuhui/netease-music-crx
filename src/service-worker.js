@@ -4,6 +4,18 @@ const OFFSCREEN_URL = "offscreen.html";
 const OFFSCREEN_TARGET = "offscreen";
 const MENU_CONTEXTS = ["action"];
 const NETEASE_COOKIE_RULE_ID = 10001;
+const COOKIE_REQUIRED_ACTIONS = new Set([
+  "refreshStore",
+  "refreshPlaylists",
+  "login",
+  "captchaSent",
+  "changePlaylist",
+  "playSong",
+  "loadSongsMap",
+  "loadMoreSongs",
+  "likeSong",
+  "unlikeSong",
+]);
 const FORWARD_TOPICS = new Set([
   "sync",
   "error",
@@ -13,8 +25,9 @@ const FORWARD_TOPICS = new Set([
 
 let creatingOffscreenDocument;
 let userId = null;
-let audioPlaying = COMMON_PROPS.playing;
+let audioPlaying = COMMON_PROPS.audioPlaying;
 let volumeMute = null;
+let contextMenuClickBound = false;
 
 init();
 
@@ -66,10 +79,13 @@ function initContextMenu() {
     });
   });
 
-  chrome.contextMenus.onClicked.addListener((item) => {
-    logger.debug(`contextMenu.${item.menuItemId}`);
-    handleContextMenuAction(item.menuItemId);
-  });
+  if (!contextMenuClickBound) {
+    chrome.contextMenus.onClicked.addListener((item) => {
+      logger.debug(`contextMenu.${item.menuItemId}`);
+      handleContextMenuAction(item.menuItemId);
+    });
+    contextMenuClickBound = true;
+  }
 }
 
 async function handleContextMenuAction(action) {
@@ -194,7 +210,13 @@ async function ensureOffscreenDocument() {
 
 async function forwardAction(action, params) {
   await ensureOffscreenDocument();
-  await syncNeteaseCookieRule();
+  if (COOKIE_REQUIRED_ACTIONS.has(action)) {
+    try {
+      await syncNeteaseCookieRule();
+    } catch (err) {
+      logger.error("syncNeteaseCookieRule.error", err?.message || err);
+    }
+  }
   return chrome.runtime.sendMessage({
     target: OFFSCREEN_TARGET,
     action,
