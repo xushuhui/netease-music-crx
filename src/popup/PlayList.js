@@ -460,10 +460,6 @@ export default function PlayList({ maxHeight }) {
                   <IconButton
                     disabled={!song.valid}
                     onClick={() => {
-                      setScrollTarget({
-                        playlistId: selectedPlaylist?.id || null,
-                        songId: song.id,
-                      });
                       storeUtils.playSong(song.id);
                     }}
                   >
