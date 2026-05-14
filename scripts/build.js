@@ -61,12 +61,16 @@ async function writeManifest() {
 
 async function normalizeHtmlOutputs() {
   const srcDir = path.join(buildDir, "src");
-  const names = ["popup.html", "offscreen.html"];
+  const entries = await fs.readdir(srcDir);
+  const popupHtmlName = entries.find((name) => name.startsWith("popup"));
+  const copyTargets = [
+    { from: "offscreen.html", to: "offscreen.html" },
+    { from: popupHtmlName || "popup.html", to: "popup.html" },
+  ];
+
   await Promise.all(
-    names.map(async (name) => {
-      const from = path.join(srcDir, name);
-      const to = path.join(buildDir, name);
-      await fs.copyFile(from, to);
+    copyTargets.map(async ({ from, to }) => {
+      await fs.copyFile(path.join(srcDir, from), path.join(buildDir, to));
     })
   );
   await fs.rm(srcDir, { recursive: true, force: true });
@@ -110,6 +114,11 @@ async function runBuild() {
   const cryptoAlias = require.resolve("crypto-browserify");
   const streamAlias = require.resolve("stream-browserify");
 
+  const popupEntry =
+    process.env.POPUP_UI === "vue"
+      ? path.join(rootDir, "src/popup-vue.html")
+      : path.join(rootDir, "src/popup.html");
+
   await fs.rm(buildDir, { recursive: true, force: true });
 
   const sharedConfig = {
@@ -142,7 +151,7 @@ async function runBuild() {
       sourcemap: false,
       rollupOptions: {
         input: {
-          popup: path.join(rootDir, "src/popup.html"),
+          popup: popupEntry,
           offscreen: path.join(rootDir, "src/offscreen.html"),
         },
         output: {

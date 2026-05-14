@@ -1,6 +1,7 @@
 import { proxy } from "valtio";
 import { subscribeKey } from "valtio/utils";
 import { COMMON_PROPS, EMPTY_AUDIO_STATE, logger } from "../utils";
+import { popupLog as sendPopupLog, sendRuntimeAction } from "./runtime";
 
 const store = proxy({
   message: "",
@@ -85,46 +86,19 @@ export function popupInit() {
 }
 
 export function popupLog(event, payload = {}) {
-  chrome.runtime.sendMessage(
-    {
-      action: "popupLog",
-      params: [event, payload],
-    },
-    consumeRuntimeLastError
-  );
+  sendPopupLog(event, payload);
 }
 
 function doAction(action, params = []) {
-  logger.debug(action + ".req", params);
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ action, params }, (response) => {
-      const lastError = chrome.runtime.lastError;
-      if (lastError) {
-        const message = lastError.message || "扩展消息通道已关闭";
-        Object.assign(store, { message, isErr: true });
-        return reject(message);
-      }
-      if (action !== "loadSongsMap") {
-        logger.debug(action + ".res", response);
-      }
-      if (!response) {
-        const message = "扩展后台未返回响应";
-        Object.assign(store, { message, isErr: true });
-        return reject(message);
-      }
-      if (!response.isErr) {
-        Object.assign(store, response);
-        return resolve(response);
-      } else {
-        Object.assign(store, response);
-        return reject(response.message);
-      }
+  return sendRuntimeAction({ action, params })
+    .then((response) => {
+      Object.assign(store, response);
+      return response;
+    })
+    .catch((message) => {
+      Object.assign(store, { message, isErr: true });
+      return Promise.reject(message);
     });
-  });
-}
-
-function consumeRuntimeLastError() {
-  return chrome.runtime.lastError;
 }
 
 subscribeKey(store, "message", () => {

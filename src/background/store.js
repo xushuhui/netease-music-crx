@@ -616,7 +616,10 @@ async function loadAndPlaySong(playlistDetail, songId, failable = true) {
     if (!song || !song.valid) {
       throw new Error("歌曲无法播放");
     } else if (song.st < 0 || (song.vip && !store.vip)) {
-      throw new Error("歌曲无法播放");
+      url = await loadSongUrlFromThirdParty(songId);
+      if (!url) {
+        throw new Error("歌曲无法播放");
+      }
     } else {
       url = await loadSongUrl(songId);
       if (!url) {
@@ -666,6 +669,19 @@ async function loadSongUrl(songId) {
     if (url) {
       return url;
     }
+  }
+  return null;
+}
+
+async function loadSongUrlFromThirdParty(songId) {
+  try {
+    const res = await fetch(`https://api.chksz.top/api/163_music?id=${songId}`);
+    const data = await res.json();
+    if (data.code === 200 && data.data?.url) {
+      return data.data.url;
+    }
+  } catch (err) {
+    logger.error("loadSongUrlFromThirdParty.error", songId, err.message);
   }
   return null;
 }

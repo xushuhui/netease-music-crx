@@ -4,6 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
+const popupEntry =
+  process.env.POPUP_UI === "vue"
+    ? path.resolve(configDir, "src/popup-vue.html")
+    : path.resolve(configDir, "src/popup.html");
 
 function loadJsAsJsx() {
   return {
@@ -41,7 +45,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: path.resolve(configDir, "src/popup.html"),
+        popup: popupEntry,
         offscreen: path.resolve(configDir, "src/offscreen.html"),
         "service-worker": path.resolve(configDir, "src/service-worker.js"),
       },

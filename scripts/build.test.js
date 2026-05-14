@@ -68,3 +68,20 @@ test("bun build emits a Manifest V3 extension bundle", () => {
     true
   );
 });
+
+test("bun build can switch popup entry to vue-ts shell", () => {
+  execFileSync("bun", ["run", "build"], {
+    cwd: repoRoot,
+    stdio: "pipe",
+    env: {
+      ...process.env,
+      POPUP_UI: "vue",
+    },
+  });
+
+  const popupHtml = fs.readFileSync(
+    path.join(repoRoot, "build", "popup.html"),
+    "utf8"
+  );
+  assert.match(popupHtml, /popup\.bundle\.js/);
+});
