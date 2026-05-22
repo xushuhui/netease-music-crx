@@ -35,6 +35,8 @@ let cloudScrollSnapshotStore = {};
 let audioState = { ...EMPTY_AUDIO_STATE, volumeMute: null };
 // 加载歌曲时间
 let songAt = 0;
+// 用户主动切歌时为 true，阻止 onended 自动推进
+let userPlayingAction = false;
 
 const store = proxy({ ...COMMON_PROPS, playing: false, dir: 1, chinaIp: null });
 
@@ -121,13 +123,18 @@ export async function playNext() {
 }
 
 export async function playSong(songId) {
+  userPlayingAction = true;
   store.playing = true;
-  const { selectedSong, playing } = await loadAndPlaySong(
-    store.selectedPlaylist,
-    songId,
-    false
-  );
-  return { selectedSong, playing };
+  try {
+    const { selectedSong, playing } = await loadAndPlaySong(
+      store.selectedPlaylist,
+      songId,
+      false
+    );
+    return { selectedSong, playing };
+  } finally {
+    userPlayingAction = false;
+  }
 }
 
 export async function updatePlayMode() {
@@ -814,6 +821,7 @@ function setupAudio() {
   };
   audio.onended = async () => {
     updateAudioState({ ...EMPTY_AUDIO_STATE });
+    if (userPlayingAction) return;
     const change = await playNextSong();
     sendToPopup({ topic: "sync", change });
   };
