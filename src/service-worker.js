@@ -3,9 +3,12 @@ import { COMMON_PROPS, DOMAIN, logger } from "./utils";
 const OFFSCREEN_URL = "offscreen.html";
 const OFFSCREEN_TARGET = "offscreen";
 const MENU_CONTEXTS = ["action"];
+const NETEASE_ORIGIN_RULE_ID = 10000;
 const NETEASE_COOKIE_RULE_ID = 10001;
 const COOKIE_REQUIRED_ACTIONS = new Set([
+  "popupInit",
   "refreshStore",
+  "logout",
   "refreshPlaylists",
   "login",
   "captchaSent",
@@ -209,7 +212,6 @@ async function ensureOffscreenDocument() {
 }
 
 async function forwardAction(action, params) {
-  await ensureOffscreenDocument();
   if (COOKIE_REQUIRED_ACTIONS.has(action)) {
     try {
       await syncNeteaseCookieRule();
@@ -217,9 +219,11 @@ async function forwardAction(action, params) {
       logger.error("syncNeteaseCookieRule.error", err?.message || err);
     }
   }
+  await ensureOffscreenDocument();
+  const forwardedAction = action === "popupInit" ? "refreshStore" : action;
   return chrome.runtime.sendMessage({
     target: OFFSCREEN_TARGET,
-    action,
+    action: forwardedAction,
     params,
   });
 }
@@ -228,7 +232,7 @@ async function syncNeteaseCookieRule() {
   if (!chrome.cookies || !chrome.declarativeNetRequest) {
     return;
   }
-  const cookies = await chrome.cookies.getAll({ url: `${DOMAIN}/` });
+  const { cookies, fromFallback } = await loadNeteaseCookies();
   const cookieHeader = [
     "os=pc",
     ...cookies.map((cookie) => `${cookie.name}=${cookie.value}`),
@@ -238,11 +242,53 @@ async function syncNeteaseCookieRule() {
       names: cookies.map((cookie) => cookie.name),
     });
   }
+  const condition = {
+    excludedInitiatorDomains: ["music.163.com"],
+    resourceTypes: ["xmlhttprequest"],
+  };
+  const extensionOrigin = `chrome-extension://${chrome.runtime.id}`;
   const update = {
-    removeRuleIds: [NETEASE_COOKIE_RULE_ID],
+    removeRuleIds: [NETEASE_ORIGIN_RULE_ID, NETEASE_COOKIE_RULE_ID],
+    addRules: [
+      {
+        id: NETEASE_ORIGIN_RULE_ID,
+        priority: 1,
+        action: {
+          type: "modifyHeaders",
+          requestHeaders: [
+            {
+              header: "Origin",
+              operation: "set",
+              value: DOMAIN,
+            },
+            {
+              header: "Referer",
+              operation: "set",
+              value: DOMAIN,
+            },
+          ],
+          responseHeaders: [
+            {
+              header: "Access-Control-Allow-Origin",
+              operation: "set",
+              value: extensionOrigin,
+            },
+            {
+              header: "Access-Control-Allow-Credentials",
+              operation: "set",
+              value: "true",
+            },
+          ],
+        },
+        condition: {
+          ...condition,
+          urlFilter: "||music.163.com/",
+        },
+      },
+    ],
   };
   if (cookieHeader) {
-    update.addRules = [
+    update.addRules.push(
       {
         id: NETEASE_COOKIE_RULE_ID,
         priority: 2,
@@ -251,19 +297,69 @@ async function syncNeteaseCookieRule() {
           requestHeaders: [
             {
               header: "cookie",
-              operation: "append",
+              operation: fromFallback ? "set" : "append",
               value: cookieHeader,
             },
           ],
         },
         condition: {
+          ...condition,
           urlFilter: "||music.163.com/",
-          resourceTypes: ["xmlhttprequest"],
         },
       },
-    ];
+    );
   }
   await chrome.declarativeNetRequest.updateSessionRules(update);
+}
+
+async function loadNeteaseCookies() {
+  const baseQueries = [
+    { url: `${DOMAIN}/` },
+    { domain: ".music.163.com" },
+    { domain: "music.163.com" },
+  ];
+  const [urlCookies, ...fallbackCookieGroups] = await Promise.all(
+    baseQueries.map((query) => chrome.cookies.getAll(query))
+  );
+  if (urlCookies.some((cookie) => cookie.name === "MUSIC_U")) {
+    return { cookies: urlCookies, fromFallback: false };
+  }
+
+  let cookies = mergeCookies(urlCookies, ...fallbackCookieGroups);
+  if (cookies.some((cookie) => cookie.name === "MUSIC_U")) {
+    return { cookies, fromFallback: true };
+  }
+
+  if (chrome.cookies.getAllCookieStores) {
+    const stores = await chrome.cookies.getAllCookieStores();
+    for (const cookieStore of stores) {
+      const storeCookieGroups = await Promise.all(
+        baseQueries.map((query) =>
+          chrome.cookies.getAll({ ...query, storeId: cookieStore.id })
+        )
+      );
+      cookies = mergeCookies(cookies, ...storeCookieGroups);
+      if (cookies.some((cookie) => cookie.name === "MUSIC_U")) {
+        return { cookies, fromFallback: true };
+      }
+    }
+  }
+
+  return { cookies, fromFallback: true };
+}
+
+function mergeCookies(...cookieGroups) {
+  const merged = [];
+  const indexes = new Map();
+  cookieGroups.flat().forEach((cookie) => {
+    if (!indexes.has(cookie.name)) {
+      indexes.set(cookie.name, merged.length);
+      merged.push(cookie);
+      return;
+    }
+    merged[indexes.get(cookie.name)] = cookie;
+  });
+  return merged;
 }
 
 function initCommandHandler() {

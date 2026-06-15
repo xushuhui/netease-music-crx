@@ -42,29 +42,18 @@ test("bun build emits a Manifest V3 extension bundle", () => {
   );
   assert.ok(!manifest.permissions.includes("webRequest"));
   assert.ok(!manifest.permissions.includes("webRequestBlocking"));
-  assert.deepEqual(manifest.declarative_net_request.rule_resources, [
-    {
-      id: "netease_request_headers",
-      enabled: true,
-      path: "rules/netease-request-headers.json",
-    },
-  ]);
+  assert.ok(!manifest.permissions.includes("input"));
+  assert.equal(manifest.declarative_net_request, undefined);
   assert.ok(
     !manifest.permissions.some((permission) => permission.includes("://"))
   );
-  assert.deepEqual(manifest.host_permissions, ["https://music.163.com/"]);
+  assert.deepEqual(manifest.host_permissions, ["https://music.163.com/*"]);
   assert.equal(
     fs.existsSync(path.join(repoRoot, "build", "background.html")),
     false
   );
   assert.equal(
     fs.existsSync(path.join(repoRoot, "build", "offscreen.html")),
-    true
-  );
-  assert.equal(
-    fs.existsSync(
-      path.join(repoRoot, "build", "rules", "netease-request-headers.json")
-    ),
     true
   );
 });

@@ -19,6 +19,7 @@ test("service worker falls back to cookie store queries when default store misse
       },
     },
     runtime: {
+      id: "test-extension",
       getURL(path) {
         return `chrome-extension://test/${path}`;
       },
@@ -77,12 +78,51 @@ test("service worker falls back to cookie store queries when default store misse
   expect(cookieQueries).toEqual([
     { url: "https://music.163.com/" },
     { domain: ".music.163.com" },
+    { domain: "music.163.com" },
     { url: "https://music.163.com/", storeId: "profile-main" },
+    { domain: ".music.163.com", storeId: "profile-main" },
+    { domain: "music.163.com", storeId: "profile-main" },
   ]);
   expect(sessionRuleUpdates).toEqual([
     {
-      removeRuleIds: [10001],
+      removeRuleIds: [10000, 10001],
       addRules: [
+        {
+          id: 10000,
+          priority: 1,
+          action: {
+            type: "modifyHeaders",
+            requestHeaders: [
+              {
+                header: "Origin",
+                operation: "set",
+                value: "https://music.163.com",
+              },
+              {
+                header: "Referer",
+                operation: "set",
+                value: "https://music.163.com",
+              },
+            ],
+            responseHeaders: [
+              {
+                header: "Access-Control-Allow-Origin",
+                operation: "set",
+                value: "chrome-extension://test-extension",
+              },
+              {
+                header: "Access-Control-Allow-Credentials",
+                operation: "set",
+                value: "true",
+              },
+            ],
+          },
+          condition: {
+            excludedInitiatorDomains: ["music.163.com"],
+            resourceTypes: ["xmlhttprequest"],
+            urlFilter: "||music.163.com/weapi/",
+          },
+        },
         {
           id: 10001,
           priority: 2,
@@ -97,8 +137,9 @@ test("service worker falls back to cookie store queries when default store misse
             ],
           },
           condition: {
-            urlFilter: "||music.163.com/",
+            excludedInitiatorDomains: ["music.163.com"],
             resourceTypes: ["xmlhttprequest"],
+            urlFilter: "||music.163.com/",
           },
         },
       ],

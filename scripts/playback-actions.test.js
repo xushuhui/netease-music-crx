@@ -21,6 +21,34 @@ function createAudioStub() {
   };
 }
 
+function createEndedAudioStub() {
+  const Base = createAudioStub();
+  return class extends Base {
+    constructor() {
+      super();
+      this._src = "";
+      this.duration = 100;
+      this.buffered = { length: 0 };
+      this.playCalls = 0;
+      globalThis.audio = this;
+    }
+
+    set src(value) {
+      this._src = value;
+      setTimeout(() => this.onloadedmetadata?.(), 0);
+    }
+
+    get src() {
+      return this._src;
+    }
+
+    async play() {
+      this.playCalls += 1;
+      await super.play();
+    }
+  };
+}
+
 function createChromeStub() {
   return {
     runtime: {
@@ -175,4 +203,103 @@ test("mv3 service worker does not duplicate context menu listeners on install", 
     click: 1,
     message: 1,
   });
+});
+
+test("audio ended advances to the next song and keeps playback active", async () => {
+  globalThis.Audio = createEndedAudioStub();
+  globalThis.chrome = createChromeStub();
+
+  const { default: api } = await import("../src/background/api.js");
+  const originalApi = {
+    loginRefresh: api.loginRefresh,
+    getPlaylistDetail: api.getPlaylistDetail,
+    getSongDetail: api.getSongDetail,
+    getSongUrls: api.getSongUrls,
+  };
+
+  try {
+    api.loginRefresh = async () => ({ code: 301 });
+    api.getPlaylistDetail = async () => ({
+      code: 200,
+      playlist: { trackIds: [{ id: 1 }, { id: 2 }] },
+    });
+    api.getSongDetail = async (ids) => ({
+      code: 200,
+      songs: ids.map((id) => ({
+        id,
+        name: `song-${id}`,
+        al: { picUrl: "" },
+        ar: [],
+        dt: 100,
+        fee: 0,
+      })),
+      privileges: ids.map(() => ({ st: 0 })),
+    });
+    api.getSongUrls = async (ids) => ({
+      code: 200,
+      data: ids.map((id) => ({ url: `https://example.test/${id}.mp3` })),
+    });
+
+    const storeModule = await import(
+      `../src/background/store.js?ended-next-${Date.now()}`
+    );
+    await storeModule.bootstrap();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    globalThis.store.playing = true;
+    globalThis.store.audioPlaying = true;
+    globalThis.audio.paused = false;
+    globalThis.audio.onpause?.();
+    const playCallsBeforeEnded = globalThis.audio.playCalls;
+
+    await globalThis.audio.onended();
+
+    expect(globalThis.store.selectedSong.id).toBe(2);
+    expect(globalThis.store.playing).toBe(true);
+    expect(globalThis.audio.playCalls).toBe(playCallsBeforeEnded + 1);
+  } finally {
+    Object.assign(api, originalApi);
+  }
+});
+
+test("login persists user identity for the next extension session", async () => {
+  const writes = [];
+  globalThis.Audio = createAudioStub();
+  globalThis.chrome = {
+    runtime: {
+      sendMessage() {},
+    },
+    storage: {
+      local: {
+        get(callback) {
+          callback?.({});
+        },
+        set(data, callback) {
+          writes.push(data);
+          callback?.();
+        },
+      },
+    },
+  };
+
+  const { default: api } = await import("../src/background/api.js");
+  const originalLogin = api.cellphoneLogin;
+
+  try {
+    api.cellphoneLogin = async () => ({
+      code: 200,
+      profile: { userId: 42, vipType: 1 },
+    });
+
+    const { login } = await import(
+      `../src/background/store.js?persist-login-${Date.now()}`
+    );
+
+    await login("13000000000", "1234");
+
+    expect(writes).toContainEqual(
+      expect.objectContaining({ userId: 42, vip: true })
+    );
+  } finally {
+    api.cellphoneLogin = originalLogin;
+  }
 });

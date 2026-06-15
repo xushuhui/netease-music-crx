@@ -309,7 +309,8 @@ export async function login(phone, password) {
   if (res.code === 200) {
     const { userId, vipType } = res.profile;
     Object.assign(store, { userId, vip: vipType > 0 });
-    return { userId, message: "登录成功" };
+    persistSave();
+    return { userId, vip: store.vip, message: "登录成功" };
   } else {
     throw new Error(res.message);
   }
@@ -383,8 +384,18 @@ function listenCommand() {
 }
 
 function persistSave() {
-  const { volume, playMode, selectedPlaylist, selectedSong, chinaIp } = store;
+  const {
+    userId,
+    vip,
+    volume,
+    playMode,
+    selectedPlaylist,
+    selectedSong,
+    chinaIp,
+  } = store;
   const data = {
+    userId,
+    vip,
     volume,
     playMode,
     chinaIp,
@@ -398,12 +409,14 @@ async function persistLoad() {
   const data = await loadData();
   if (data) {
     const {
+      userId = COMMON_PROPS.userId,
+      vip = COMMON_PROPS.vip,
       volume = COMMON_PROPS.volume,
       playMode = COMMON_PROPS.playMode,
       chinaIp = null,
     } = data;
     logger.debug("persist.load", data);
-    Object.assign(store, { volume, playMode, chinaIp });
+    Object.assign(store, { userId, vip, volume, playMode, chinaIp });
   }
 }
 
@@ -435,19 +448,14 @@ function getPopupData() {
 
 async function refreshLogin() {
   const res = await api.loginRefresh();
-  if (res.code !== 200) {
-    if (store.userId) {
-      await reset();
-    }
-    return;
+  if (res.code !== 200 && store.userId) {
+    await reset();
   }
   if (store.userId === null) {
-    const res = await api.getUser();
-    if (res.code === 200 && res?.profile) {
-      const { userId, vipType } = res.profile;
+    const userRes = await api.getUser();
+    if (userRes.code === 200 && userRes?.profile) {
+      const { userId, vipType } = userRes.profile;
       Object.assign(store, { userId, vip: vipType > 0 });
-    } else {
-      await reset();
     }
   }
 }
@@ -844,6 +852,10 @@ async function updateAudioSrc(src, playing) {
       return reject(audio.error);
     };
     audio.onloadedmetadata = () => {
+      if (playing) {
+        Promise.resolve(audio.play()).then(resolve).catch(reject);
+        return;
+      }
       return resolve();
     };
   });
