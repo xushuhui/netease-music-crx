@@ -40,6 +40,7 @@ const state = {
   toggleQueued: false,
   suppressFullRerenderUntil: 0,
   songsScrollTopByPlaylist: {} as Record<number, number>,
+  loadingMore: false,
 };
 
 function safeText(value: unknown) {
@@ -163,8 +164,8 @@ function render() {
               })
               .join("")}
             ${
-              store.selectedPlaylist?.type === 5 && store.selectedPlaylist?.hasMore
-                ? `<button class="load-more" id="btn-load-more">加载更多</button>`
+              store.selectedPlaylist?.type === 5 && store.selectedPlaylist?.hasMore && state.loadingMore
+                ? `<div class="load-more-spinner">加载中…</div>`
                 : ""
             }
           </div>
@@ -235,11 +236,6 @@ function bindEvents() {
     const code = (document.getElementById("captcha") as HTMLInputElement | null)?.value;
     if (!phone || !code) return;
     await login(phone, code).catch(() => {});
-    await refreshSongsMap();
-    rerender();
-  });
-  on("btn-load-more", async () => {
-    await loadMoreSongs().catch(() => {});
     await refreshSongsMap();
     rerender();
   });
@@ -325,6 +321,19 @@ function bindEvents() {
       if (!playlistId) return;
       state.cloudScrollTopByPlaylist[playlistId] = songsBody.scrollTop;
       state.songsScrollTopByPlaylist[playlistId] = songsBody.scrollTop;
+      if (
+        store.selectedPlaylist?.type === 5 &&
+        store.selectedPlaylist?.hasMore &&
+        !state.loadingMore &&
+        songsBody.scrollTop + songsBody.clientHeight >= songsBody.scrollHeight - 120
+      ) {
+        state.loadingMore = true;
+        loadMoreSongs()
+          .catch(() => {})
+          .then(() => refreshSongsMap())
+          .then(() => { rerender(); })
+          .finally(() => { state.loadingMore = false; });
+      }
     });
   }
 }

@@ -250,14 +250,11 @@ body {
   scrollbar-gutter: stable;
 }
 
-.load-more {
-  display: block;
-  margin: 10px auto;
-  height: 28px;
-  padding: 0 12px;
-  border: 1px solid #d6d6d6;
-  border-radius: 4px;
-  background: #fff;
+.load-more-spinner {
+  text-align: center;
+  padding: 8px 0;
+  color: #999;
+  font-size: 12px;
 }
 
 .song-row {
